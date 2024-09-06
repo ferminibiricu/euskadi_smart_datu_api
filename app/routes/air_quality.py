@@ -1,10 +1,36 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
-from app.utils.air_quality_utils import get_nearest_station
+from app.utils.air_quality_utils import get_nearest_station, get_all_stations_with_distance
 from app.services.air_quality_service import get_air_quality_data, predict_air_quality, calculate_air_quality_summary
 import logging
 
 router = APIRouter()
+
+@router.get("/stations_by_distance")
+def get_stations_by_distance(
+    lat: float, 
+    lon: float
+):
+    """
+    Devuelve una lista de estaciones de calidad del aire ordenadas por distancia desde las coordenadas proporcionadas,
+    incluyendo el código de estación, nombre, latitud, longitud y distancia.
+
+    :param lat: Latitud de la ubicación.
+    :param lon: Longitud de la ubicación.
+    :return: Lista de estaciones ordenadas por distancia.
+    """
+    logging.info(f"Received request to get stations ordered by distance from lat: {lat}, lon: {lon}.")
+    
+    # Obtener todas las estaciones con sus distancias
+    stations = get_all_stations_with_distance(lat, lon)
+    
+    if not stations:
+        logging.warning("No stations found or unable to fetch station data.")
+        raise HTTPException(status_code=404, detail="Unable to fetch station data.")
+    
+    # Devolver el listado de estaciones con sus distancias
+    return stations
+
 
 @router.get("/nearest_station")
 def get_nearest_station_by_location(lat: float, lon: float):
@@ -18,6 +44,8 @@ def get_nearest_station_by_location(lat: float, lon: float):
     
     nearest_station_code = station["properties"]["id"]
     nearest_station_name = station["properties"]["name"]
+    nearest_station_lat = station["geometry"]["coordinates"][1]  # Latitud de la estación
+    nearest_station_lon = station["geometry"]["coordinates"][0]  # Longitud de la estación
     distance = station["distance"]  # Acceder directamente a la clave 'distance'
     
     logging.info(f"Nearest station found: {nearest_station_name} (ID: {nearest_station_code}) at a distance of {distance:.2f} km.")
@@ -26,8 +54,11 @@ def get_nearest_station_by_location(lat: float, lon: float):
     return {
         "nearest_station_code": nearest_station_code,
         "nearest_station_name": nearest_station_name,
+        "nearest_station_lat": nearest_station_lat,  # Añadir latitud
+        "nearest_station_lon": nearest_station_lon,  # Añadir longitud
         "distance": round(distance, 2)
     }
+
 
 @router.get("/air_quality")
 def get_air_quality_by_location(
@@ -45,6 +76,9 @@ def get_air_quality_by_location(
     
     nearest_station_code = station["properties"]["id"]
     nearest_station_name = station["properties"]["name"]
+    nearest_station_lat = station["geometry"]["coordinates"][1]  # Latitud de la estación más cercana
+    nearest_station_lon = station["geometry"]["coordinates"][0]  # Longitud de la estación más cercana
+    distance = station["distance"]
     logging.info(f"Nearest station found: {nearest_station_name} (ID: {nearest_station_code})")
     
     # Paso 2: Obtener los datos actuales de calidad del aire para las últimas X horas
@@ -66,6 +100,9 @@ def get_air_quality_by_location(
         "lon": lon,
         "nearest_station_code": nearest_station_code,
         "nearest_station_name": nearest_station_name,
+        "nearest_station_lat": nearest_station_lat,
+        "nearest_station_lon": nearest_station_lon,
+        "distance": round(distance, 2),
         "current_air_quality_summary": current_air_quality_summary,
         "predicted_air_quality_summary": predicted_air_quality_summary
     }

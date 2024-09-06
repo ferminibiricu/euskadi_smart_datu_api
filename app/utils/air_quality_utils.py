@@ -46,3 +46,45 @@ def get_nearest_station(lat, lon):
     else:
         logging.error(f"Failed to fetch station data. HTTP status code: {response.status_code}")
         return None
+    
+def get_all_stations_with_distance(lat, lon):
+    """
+    Obtiene una lista de todas las estaciones con sus distancias desde las coordenadas proporcionadas.
+
+    :param lat: Latitud de la ubicación.
+    :param lon: Longitud de la ubicación.
+    :return: Lista de diccionarios con código, nombre, latitud, longitud y distancia de cada estación.
+    """
+    url = f"{air_quality_base_url}{stations_endpoint}"
+
+    logging.info(f"Fetching station data from {url}")
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        stations = response.json()["features"]
+        station_distances = []
+
+        logging.info(f"Processing {len(stations)} stations to calculate distances.")
+        for station in stations:
+            station_lat = station["geometry"]["coordinates"][1]
+            station_lon = station["geometry"]["coordinates"][0]
+            
+            # Calcula la distancia geodésica entre las coordenadas proporcionadas y la estación
+            distance = geodesic((lat, lon), (station_lat, station_lon)).km
+            station_info = {
+                "station_code": station["properties"]["id"],
+                "station_name": station["properties"]["name"],
+                "station_lat": station_lat,  # Añadir latitud de la estación
+                "station_lon": station_lon,  # Añadir longitud de la estación
+                "distance": distance
+            }
+            station_distances.append(station_info)
+
+        # Ordenar las estaciones por distancia
+        station_distances = sorted(station_distances, key=lambda x: x["distance"])
+
+        logging.info("Stations sorted by distance.")
+        return station_distances
+    else:
+        logging.error(f"Failed to fetch station data. HTTP status code: {response.status_code}")
+        return []
