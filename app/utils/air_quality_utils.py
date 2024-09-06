@@ -3,7 +3,6 @@ import requests
 from geopy.distance import geodesic
 from config.config import air_quality_base_url, stations_endpoint
 
-
 def get_nearest_station(lat, lon):
     """
     Encuentra la estación de monitoreo de calidad del aire más cercana a las coordenadas dadas.
