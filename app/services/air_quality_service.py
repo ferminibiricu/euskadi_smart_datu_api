@@ -63,7 +63,7 @@ def calculate_air_quality_summary(data, hours: int):
     weighted_sum = 0
     
     # Asignar pesos decrecientes: las horas más recientes tendrán más peso
-    weights = [(i + 1) / total_data_points for i in range(total_data_points)]
+    weights = [(total_data_points - i) / total_data_points for i in range(total_data_points)]
 
     logging.info(f"Total data points received: {total_data_points}")
     
@@ -107,7 +107,6 @@ def calculate_air_quality_summary(data, hours: int):
         else:
             return "Muy bueno"
     else:
-        logging.warning("No valid data available after filtering. Returning 'Datos no disponibles'.")
         return "Datos no disponibles"
 
 def predict_air_quality(current_summary: str, hours: int = 2):

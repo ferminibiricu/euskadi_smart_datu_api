@@ -6,6 +6,29 @@ import logging
 
 router = APIRouter()
 
+@router.get("/nearest_station")
+def get_nearest_station_by_location(lat: float, lon: float):
+    logging.info(f"Received request for nearest air quality station at lat: {lat}, lon: {lon}.")
+    
+    # Buscar la estación más cercana
+    station = get_nearest_station(lat, lon)
+    if not station:
+        logging.warning("No nearby station found.")
+        raise HTTPException(status_code=404, detail="No nearby station found.")
+    
+    nearest_station_code = station["properties"]["id"]
+    nearest_station_name = station["properties"]["name"]
+    distance = station["distance"]  # Acceder directamente a la clave 'distance'
+    
+    logging.info(f"Nearest station found: {nearest_station_name} (ID: {nearest_station_code}) at a distance of {distance:.2f} km.")
+
+    # Devolver los datos solicitados
+    return {
+        "nearest_station_code": nearest_station_code,
+        "nearest_station_name": nearest_station_name,
+        "distance": round(distance, 2)
+    }
+
 @router.get("/air_quality")
 def get_air_quality_by_location(
     lat: float, 
