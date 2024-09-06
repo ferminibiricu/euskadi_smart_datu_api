@@ -10,11 +10,10 @@ def get_nearest_station(lat, lon):
 
     :param lat: Latitud de la ubicación.
     :param lon: Longitud de la ubicación.
-    :return: Diccionario con la información de la estación más cercana.
+    :return: Diccionario con la información de la estación más cercana y la distancia.
     """
     url = f"{air_quality_base_url}{stations_endpoint}"
 
-    
     logging.info(f"Fetching station data from {url}")
     response = requests.get(url)
     
@@ -39,6 +38,8 @@ def get_nearest_station(lat, lon):
 
         if nearest_station:
             logging.info(f"Nearest station found: {nearest_station['properties']['name']} (ID: {nearest_station['properties']['id']}) at a distance of {min_distance:.2f} km.")
+            # Añadir la distancia al diccionario de la estación
+            nearest_station['distance'] = round(min_distance, 2)
         else:
             logging.warning("No nearby station found.")
 
