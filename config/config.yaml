@@ -1,0 +1,9 @@
+air_quality:
+  base_url: "https://api.euskadi.eus/air-quality"
+  stations_endpoint: "/stations?lang=SPANISH"
+  hourly_measurements_endpoint: "/measurements/hourly/stations/{station_code}/from/{start_time}/to/{end_time}?lang=SPANISH"
+  exclusion_threshold: 50  # En porcentaje
+
+logging:
+  level: "DEBUG"
+  file: "logs/app.log"
