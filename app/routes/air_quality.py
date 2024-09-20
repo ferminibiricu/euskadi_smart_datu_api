@@ -106,3 +106,65 @@ def get_air_quality_by_location(
         "current_air_quality_summary": current_air_quality_summary,
         "predicted_air_quality_summary": predicted_air_quality_summary
     }
+
+
+@router.get("/air_quality_stations")
+def get_air_quality_for_all_stations(
+    station_id: Optional[str] = None,
+    hours: Optional[int] = 6
+):
+    """
+    Devuelve la calidad del aire para todas las estaciones o para una estación específica si se proporciona station_id.
+    
+    :param station_id: ID opcional de la estación de calidad del aire.
+    :param hours: Número opcional de horas anteriores para las que se requiere la calidad del aire (por defecto 6).
+    :return: Información de calidad del aire para todas las estaciones o la estación específica.
+    """
+    logging.info(f"Received request for air quality data for all stations or specific station ID: {station_id}, for the past {hours} hours.")
+    
+    # Si se proporciona un station_id, obtener datos solo para esa estación
+    if station_id:
+        logging.info(f"Fetching air quality data for station ID: {station_id}")
+        data = get_air_quality_data(station_id, hours)
+        if not data:
+            logging.warning(f"No air quality data found for station ID {station_id}.")
+            raise HTTPException(status_code=404, detail=f"Air quality data not found for station ID {station_id}.")
+        
+        current_air_quality_summary = calculate_air_quality_summary(data, hours)
+        predicted_air_quality_summary = predict_air_quality(current_air_quality_summary, hours)
+        
+        return {
+            "station_id": station_id,
+            "current_air_quality_summary": current_air_quality_summary,
+            "predicted_air_quality_summary": predicted_air_quality_summary
+        }
+    
+    # Si no se proporciona un station_id, obtener datos para todas las estaciones
+    logging.info("Fetching air quality data for all stations.")
+    all_stations = get_all_stations()
+    results = []
+    
+    for station in all_stations:
+        station_code = station["id"]
+        station_name = station["name"]
+        logging.info(f"Processing station: {station_name} (ID: {station_code})")
+        
+        data = get_air_quality_data(station_code, hours)
+        if data:
+            current_air_quality_summary = calculate_air_quality_summary(data, hours)
+            predicted_air_quality_summary = predict_air_quality(current_air_quality_summary, hours)
+            
+            results.append({
+                "station_id": station_code,
+                "station_name": station_name,
+                "current_air_quality_summary": current_air_quality_summary,
+                "predicted_air_quality_summary": predicted_air_quality_summary
+            })
+        else:
+            logging.warning(f"No air quality data found for station ID {station_code}.")
+    
+    if not results:
+        logging.warning("No air quality data found for any stations.")
+        raise HTTPException(status_code=404, detail="No air quality data found for any stations.")
+    
+    return results
