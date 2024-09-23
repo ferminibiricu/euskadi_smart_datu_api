@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.utils import class_weight
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
@@ -155,24 +155,25 @@ if X_all.size > 0 and y_all.size > 0:
     log_message(f"Pesos de las clases calculados: {class_weights_dict}")
 
     # Ajustar manualmente los pesos de las clases 1, 2 y 3
-    manual_weight_factor = 5  # Este es un factor que puedes ajustar según los resultados
-    class_weights_dict[1] *= manual_weight_factor
-    class_weights_dict[2] *= manual_weight_factor
-    class_weights_dict[3] *= manual_weight_factor
+    class_weights_dict[1] *= 10
+    class_weights_dict[2] *= 7
+    class_weights_dict[3] *= 5
 
     log_message(f"Pesos de las clases ajustados manualmente: {class_weights_dict}")
 
     # Crear datasets de TensorFlow para manejar grandes volúmenes de datos
     log_message("Creando datasets de TensorFlow...")
+    batch_size = 128  # Aumentado para acelerar el entrenamiento si la memoria lo permite
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-    train_dataset = train_dataset.batch(64).prefetch(tf.data.AUTOTUNE)
+    train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
     val_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test))
-    val_dataset = val_dataset.batch(64).prefetch(tf.data.AUTOTUNE)
+    val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     log_message("Datasets creados.")
 
     # Callbacks
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+    checkpoint = ModelCheckpoint('../model/lstm_air_quality_best_model.keras', save_best_only=True, monitor='val_loss')
     log_message("Callbacks configurados.")
 
     try:
@@ -183,14 +184,14 @@ if X_all.size > 0 and y_all.size > 0:
             epochs=50,
             validation_data=val_dataset,
             class_weight=class_weights_dict,
-            callbacks=[early_stopping],
+            callbacks=[early_stopping, checkpoint],
             verbose=1
         )
 
-        # Guardar el modelo entrenado
+        # Guardar el modelo entrenado final
         model_dir = '../model'
         os.makedirs(model_dir, exist_ok=True)
-        model_file = os.path.join(model_dir, 'lstm_air_quality_model.h5')
+        model_file = os.path.join(model_dir, 'lstm_air_quality_model.keras')
         model.save(model_file)
         log_message(f"Entrenamiento completado y modelo guardado en {model_file}")
 
