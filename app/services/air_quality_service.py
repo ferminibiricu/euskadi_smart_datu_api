@@ -16,7 +16,7 @@ scaler_file = 'data/processed/scaler.pkl'
 scaler = joblib.load(scaler_file)
 logging.info(f"Escalador cargado desde {scaler_file}")
 
-def get_air_quality_data(station_code: str, hours: int = 24):
+def get_air_quality_data(station_code: str, hours: int):
     # Calcular el rango de tiempo para los datos
     start_time, end_time = calculate_time_range(hours)
     url = f"{air_quality_base_url}{hourly_measurements_endpoint.format(station_code=station_code, start_time=start_time, end_time=end_time)}"
@@ -30,7 +30,7 @@ def get_air_quality_data(station_code: str, hours: int = 24):
         data = response.json()
         
         # Registrar el contenido de los datos recibidos para depuración
-        logging.debug(f"Datos de calidad del aire recibidos: {data}")
+        logging.debug(f"Datos de calidad del aire recibidos - len(data): {len(data)}")
         
         if isinstance(data, list) and len(data) > 0:
             return data
