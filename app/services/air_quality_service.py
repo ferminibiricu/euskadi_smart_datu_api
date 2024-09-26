@@ -1,7 +1,10 @@
+# app/services/air_quality_service.py
+
 import logging
 import numpy as np
 import joblib
 import requests
+import pandas as pd
 from fastapi import HTTPException
 from tensorflow.keras.models import load_model
 from config.config import air_quality_base_url, hourly_measurements_endpoint, exclusion_threshold
@@ -30,7 +33,7 @@ def get_air_quality_data(station_code: str, hours: int):
         data = response.json()
         
         # Registrar el contenido de los datos recibidos para depuración
-        logging.debug(f"Datos de calidad del aire recibidos - len(data): {len(data)}")
+        logging.debug(f"Datos de calidad del aire recibidos para la estación {station_code}: {data}")
         
         if isinstance(data, list) and len(data) > 0:
             return data
@@ -50,25 +53,31 @@ def preprocess_data_for_lstm(data):
     Preprocess data for LSTM model input, including scaling the features.
     """
     try:
-        # Definir las características utilizadas durante el entrenamiento
+        # Definir las características utilizadas durante el entrenamiento, incluyendo las unidades
         feature_names = [
-            'D.vien', 'D.vien_dup',
-            'H', 'H_dup',
-            'NO', 'NO_dup',
-            'NO2', 'NO2_dup',
-            'NOX', 'NOX_dup',
-            'P', 'P_dup',
-            'PM10', 'PM10_dup',
-            'PM2,5', 'PM2,5_dup',
-            'R', 'R_dup',
-            'SH2', 'SH2_dup',
-            'SO2', 'SO2_dup',
-            'Tº', 'Tº_dup',
-            'V.vien', 'V.vien_dup',
-            'NO2_ICA', 'PM10_ICA', 'PM2,5_ICA', 'SO2_ICA',
-            'airQualityStation'
+            'NO (µg/m3)', 'NO2 (µg/m3)', 'NOX (µg/m3)', 'O3 (µg/m3)',
+            'PM10 (µg/m3)', 'PM2,5 (µg/m3)', 'SO2 (µg/m3)', 'CO (mg/m3)',
+            'Tº (ºC)', 'H (%)', 'P (mBar)', 'V.vien (m/s)', 'D.vien (grados)',
+            'Radiación (W/m2)'
         ]
-        expected_num_features = len(feature_names)
+
+        # Mapeo de nombres alternativos de mediciones, incluyendo unidades
+        measurement_name_mapping = {
+            'NO (µg/m3)': ['NO', 'NO (µg/m3)'],
+            'NO2 (µg/m3)': ['NO2', 'NO2 (µg/m3)'],
+            'NOX (µg/m3)': ['NOX', 'NOX (µg/m3)'],
+            'O3 (µg/m3)': ['O3', 'O3 (µg/m3)'],
+            'PM10 (µg/m3)': ['PM10', 'PM10 (µg/m3)'],
+            'PM2,5 (µg/m3)': ['PM2.5', 'PM2,5', 'PM2,5 (µg/m3)', 'PM25'],
+            'SO2 (µg/m3)': ['SO2', 'SO2 (µg/m3)'],
+            'CO (mg/m3)': ['CO', 'CO (mg/m3)'],
+            'Tº (ºC)': ['Tº', 'T', 'Temperatura', 'Tº (ºC)'],
+            'H (%)': ['H', 'Humedad', 'H (%)'],
+            'P (mBar)': ['P', 'Presión', 'P (mBar)'],
+            'V.vien (m/s)': ['V.vien', 'Velocidad viento', 'V.vien (m/s)'],
+            'D.vien (grados)': ['D.vien', 'Dirección viento', 'D.vien (grados)'],
+            'Radiación (W/m2)': ['Radiación', 'Radiación (W/m2)']
+        }
 
         # Mapeo de niveles de calidad del aire
         airquality_mapping = {
@@ -90,25 +99,17 @@ def preprocess_data_for_lstm(data):
             airQualityStation_value = airquality_mapping.get(airQualityStation, np.nan)
 
             measurement_dict = {}
-            counts = {}
             for m in measurements:
                 name = m['name']
+                unit = m.get('unit', '')
                 value = m.get('value', np.nan)
-                if name in counts:
-                    counts[name] += 1
-                    key = f"{name}_dup"
-                else:
-                    counts[name] = 1
-                    key = name
-                measurement_dict[key] = value
-                # Si existe el campo 'airquality', mapearlo a un valor numérico
-                if 'airquality' in m:
-                    airquality = m['airquality']
-                    ica_value = airquality_mapping.get(airquality, np.nan)
-                    measurement_dict[f"{name}_ICA"] = ica_value
+                name_with_unit = f"{name} ({unit})"
 
-            # Añadir airQualityStation
-            measurement_dict['airQualityStation'] = airQualityStation_value
+                # Buscar el nombre estándar de la medición
+                for standard_name, aliases in measurement_name_mapping.items():
+                    if name == standard_name or name_with_unit == standard_name or name in aliases or name_with_unit in aliases:
+                        measurement_dict[standard_name] = value
+                        break
 
             # Crear el vector de características para este punto en el tiempo
             feature_vector = []
@@ -118,36 +119,63 @@ def preprocess_data_for_lstm(data):
 
             feature_vectors.append(feature_vector)
 
-        # Convertir la lista de vectores en un array de numpy
-        features = np.array(feature_vectors, dtype=np.float32)
+        # Convertir la lista de vectores en un DataFrame
+        features_df = pd.DataFrame(feature_vectors, columns=feature_names)
 
-        # Verificar si el número de características coincide con el esperado
-        if features.shape[1] != expected_num_features:
-            logging.error(f"El número de características ({features.shape[1]}) no coincide con el esperado ({expected_num_features}).")
-            raise ValueError(f"El número de características ({features.shape[1]}) no coincide con el esperado ({expected_num_features}).")
+        # Añadir logs para depuración
+        logging.debug(f"Características extraídas antes de manejar NaN:\n{features_df}")
 
-        # Manejar valores faltantes
-        col_means = np.nanmean(features, axis=0)
-        inds = np.where(np.isnan(features))
-        features[inds] = np.take(col_means, inds[1])
+        # Manejar valores faltantes (NaN)
+        features_df.ffill(inplace=True)  # Rellenar hacia adelante
+        features_df.bfill(inplace=True)  # Rellenar hacia atrás
+        features_df.fillna(features_df.mean(), inplace=True)  # Rellenar con la media si quedan NaN
+
+        # Añadir logs después de manejar NaN
+        logging.debug(f"Características después de imputación de NaN:\n{features_df}")
+
+        # Verificar si aún hay NaN
+        if features_df.isnull().values.any():
+            logging.warning("Aún hay valores NaN después de la imputación. Se reemplazarán por ceros.")
+            features_df.fillna(0, inplace=True)
 
         # Asegurarse de que tenemos 24 pasos de tiempo
         n_timesteps_expected = 24
-        if features.shape[0] >= n_timesteps_expected:
-            features = features[-n_timesteps_expected:, :]
+        if len(features_df) >= n_timesteps_expected:
+            features_df = features_df.tail(n_timesteps_expected)
         else:
-            # Si tenemos menos de 24 pasos, rellenamos con la primera fila
-            n_missing = n_timesteps_expected - features.shape[0]
-            padding = np.repeat(features[0:1, :], n_missing, axis=0)
-            features = np.concatenate((padding, features), axis=0)
+            # Si tenemos menos de 24 pasos, rellenamos duplicando las primeras filas
+            n_missing = n_timesteps_expected - len(features_df)
+            padding = features_df.head(1).copy()
+            padding = pd.concat([padding]*n_missing, ignore_index=True)
+            features_df = pd.concat([padding, features_df], ignore_index=True)
 
-        # Redimensionar a 3D para el LSTM (samples, timesteps, features)
-        features_reshaped = features.reshape((1, features.shape[0], features.shape[1]))
+        # Verificar y corregir las características antes de escalar
+        expected_features = scaler.feature_names_in_
+        current_features = features_df.columns
+
+        missing_features = set(expected_features) - set(current_features)
+        extra_features = set(current_features) - set(expected_features)
+
+        if missing_features:
+            logging.warning(f"Missing features: {missing_features}")
+            for feature in missing_features:
+                features_df[feature] = 0.0  # Asignar un valor predeterminado a las características faltantes
+
+        if extra_features:
+            logging.warning(f"Extra features: {extra_features}")
+            features_df = features_df.drop(columns=list(extra_features))  # Eliminar las características extra
+
+        features_df = features_df[expected_features]  # Asegurarse de que el orden es correcto
 
         # Escalar las características usando el escalador previamente cargado
-        n_timesteps = features_reshaped.shape[1]
-        n_features = features_reshaped.shape[2]
-        features_scaled = scaler.transform(features_reshaped.reshape(-1, n_features)).reshape(1, n_timesteps, n_features)
+        try:
+            features_scaled = scaler.transform(features_df)
+        except Exception as e:
+            logging.error(f"Error al escalar las características: {e}")
+            raise HTTPException(status_code=500, detail="Error in scaling air quality data for LSTM model.")
+
+        # Redimensionar para el LSTM (samples, timesteps, features)
+        features_scaled = features_scaled.reshape(1, n_timesteps_expected, -1)
 
         return features_scaled
 
@@ -165,7 +193,8 @@ def postprocess_lstm_output(prediction):
 
 def calculate_time_range(hours: int = 24):
     from datetime import datetime, timedelta
-    end_time = datetime.utcnow()
+    # Ajustar el tiempo de fin para evitar solicitar datos futuros
+    end_time = datetime.utcnow() - timedelta(minutes=10)  # Restar 10 minutos para evitar problemas de sincronización
     start_time = end_time - timedelta(hours=hours)
     start_time_str = start_time.strftime("%Y-%m-%dT%H:%M")
     end_time_str = end_time.strftime("%Y-%m-%dT%H:%M")
@@ -220,15 +249,24 @@ def predict_air_quality(current_air_quality_data):
     """
     Uses the LSTM model to predict the air quality based on current data.
     """
-    logging.info(f"Predicting air quality based on current air quality data.")
+    logging.info("Predicting air quality based on current air quality data.")
     
-    # Preprocesar los datos actuales de calidad del aire para el modelo
-    features_scaled = preprocess_data_for_lstm(current_air_quality_data)
-    
-    # Generar la predicción utilizando el modelo LSTM
-    prediction = model.predict(features_scaled)
-    
-    # Postprocesar la predicción para obtener la categoría de calidad del aire
-    predicted_summary = postprocess_lstm_output(prediction)
-    
-    return predicted_summary
+    try:
+        # Preprocesar los datos actuales de calidad del aire para el modelo
+        logging.debug(f"Datos actuales de calidad del aire: {current_air_quality_data}")
+        features_scaled = preprocess_data_for_lstm(current_air_quality_data)
+        logging.debug(f"Características escaladas: {features_scaled}")
+        
+        # Generar la predicción utilizando el modelo LSTM
+        prediction = model.predict(features_scaled)
+        logging.debug(f"Predicción cruda del modelo: {prediction}")
+        
+        # Postprocesar la predicción para obtener la categoría de calidad del aire
+        predicted_summary = postprocess_lstm_output(prediction)
+        logging.debug(f"Resumen de calidad del aire predicho: {predicted_summary}")
+        
+        return predicted_summary
+
+    except Exception as e:
+        logging.error(f"Error during prediction: {e}", exc_info=True)
+        raise

@@ -1,6 +1,6 @@
 import logging
 from fastapi import FastAPI
-from app.routes import air_quality, transport
+from app.routes import air_quality
 
 # Configuración básica de logging
 logging.basicConfig(
@@ -14,7 +14,6 @@ app = FastAPI(title="Euskadi Smart Datu API")
 
 # Incluir los routers para las rutas de calidad del aire y transporte
 app.include_router(air_quality.router, prefix="/api/v1/environment")
-app.include_router(transport.router, prefix="/api/v1/public_transport")
 
 @app.get("/")
 def read_root():

@@ -46,7 +46,7 @@ def get_nearest_station(lat, lon):
     else:
         logging.error(f"Failed to fetch station data. HTTP status code: {response.status_code}")
         return None
-    
+
 def get_all_stations_with_distance(lat, lon):
     """
     Obtiene una lista de todas las estaciones con sus distancias desde las coordenadas proporcionadas.
@@ -76,7 +76,7 @@ def get_all_stations_with_distance(lat, lon):
                 "station_name": station["properties"]["name"],
                 "station_lat": station_lat,  # Añadir latitud de la estación
                 "station_lon": station_lon,  # Añadir longitud de la estación
-                "distance": distance
+                "distance": round(distance, 2)
             }
             station_distances.append(station_info)
 
@@ -88,3 +88,36 @@ def get_all_stations_with_distance(lat, lon):
     else:
         logging.error(f"Failed to fetch station data. HTTP status code: {response.status_code}")
         return []
+
+def get_all_stations():
+    """
+    Obtiene una lista de todas las estaciones de calidad del aire.
+
+    :return: Diccionario con las estaciones.
+    """
+    url = f"{air_quality_base_url}{stations_endpoint}"
+
+    logging.info(f"Fetching all station data from {url}")
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        stations = response.json()
+        return stations
+    else:
+        logging.error(f"Failed to fetch station data. HTTP status code: {response.status_code}")
+        return None
+
+def get_station_by_id(station_id):
+    """
+    Obtiene la información de una estación por su ID.
+
+    :param station_id: ID de la estación.
+    :return: Diccionario con la información de la estación o None si no se encuentra.
+    """
+    stations = get_all_stations()
+    if stations and "features" in stations:
+        for station in stations["features"]:
+            if station["properties"]["id"] == str(station_id):
+                return station
+    logging.warning(f"Station with ID {station_id} not found.")
+    return None
