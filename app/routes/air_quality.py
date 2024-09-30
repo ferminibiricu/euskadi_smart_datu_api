@@ -1,5 +1,3 @@
-# app/routes/air_quality.py
-
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 from app.utils.air_quality_utils import (
