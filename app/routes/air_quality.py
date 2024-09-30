@@ -76,15 +76,15 @@ def get_air_quality_by_location(lat: float, lon: float):
         data_for_summary = get_air_quality_data(nearest_station_code, summary_hours)
         if not data_for_summary:
             logging.warning(f"Air quality data not found for the nearest station ID {nearest_station_code}.")
-            raise HTTPException(status_code=404, detail="Air quality data not found for the nearest station.")
-
-        current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-        logging.debug(f"Current air quality summary: {current_air_quality_summary}")
+            current_air_quality_summary = "Datos no disponibles"
+        else:
+            current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
+            logging.debug(f"Current air quality summary: {current_air_quality_summary}")
 
         # Obtener datos para la predicción
         data_for_prediction = get_air_quality_data(nearest_station_code, prediction_hours)
-        if not data_for_prediction or len(data_for_prediction) < prediction_hours:
-            logging.warning(f"Not enough data for prediction for station ID {nearest_station_code}.")
+        if not data_for_prediction:
+            logging.warning(f"Air quality data not found for prediction for station ID {nearest_station_code}.")
             predicted_air_quality_summary = "Predicción no disponible"
         else:
             try:
@@ -107,6 +107,8 @@ def get_air_quality_by_location(lat: float, lon: float):
             "current_air_quality_summary": current_air_quality_summary,
             "predicted_air_quality_summary": predicted_air_quality_summary,
         }
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logging.error(f"An error occurred while processing air quality data: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while processing air quality data.")
@@ -137,15 +139,15 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
             data_for_summary = get_air_quality_data(station_code, summary_hours)
             if not data_for_summary:
                 logging.warning(f"Air quality data not found for station ID {station_code}.")
-                raise HTTPException(status_code=404, detail="Air quality data not found for the station.")
-
-            current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-            logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
+                current_air_quality_summary = "Datos no disponibles"
+            else:
+                current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
+                logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
 
             # Obtener datos para la predicción
             data_for_prediction = get_air_quality_data(station_code, prediction_hours)
-            if not data_for_prediction or len(data_for_prediction) < prediction_hours:
-                logging.warning(f"Not enough data for prediction for station ID {station_code}.")
+            if not data_for_prediction:
+                logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                 predicted_air_quality_summary = "Predicción no disponible"
             else:
                 try:
@@ -164,6 +166,8 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                 "current_air_quality_summary": current_air_quality_summary,
                 "predicted_air_quality_summary": predicted_air_quality_summary,
             }
+        except HTTPException as he:
+            raise he
         except Exception as e:
             logging.error(f"An error occurred while processing station {station_code}: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"An error occurred while processing station {station_code}.")
@@ -189,15 +193,15 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                 data_for_summary = get_air_quality_data(station_code, summary_hours)
                 if not data_for_summary:
                     logging.warning(f"Air quality data not found for station ID {station_code}.")
-                    continue  # Saltar esta estación
-
-                current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-                logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
+                    current_air_quality_summary = "Datos no disponibles"
+                else:
+                    current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
+                    logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
 
                 # Obtener datos para la predicción
                 data_for_prediction = get_air_quality_data(station_code, prediction_hours)
-                if not data_for_prediction or len(data_for_prediction) < prediction_hours:
-                    logging.warning(f"Not enough data for prediction for station ID {station_code}. Se obtuvieron {len(data_for_prediction)} registros.")
+                if not data_for_prediction:
+                    logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                     predicted_air_quality_summary = "Predicción no disponible"
                 else:
                     try:
@@ -217,9 +221,11 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                     "predicted_air_quality_summary": predicted_air_quality_summary,
                 }
                 results.append(station_result)
+            except HTTPException as he:
+                raise he
             except Exception as e:
                 logging.error(f"An error occurred while processing station {station_code}: {str(e)}", exc_info=True)
-                # Opcional: puedes decidir si continuar o incluir un mensaje de error en el resultado
-                continue  # Saltar esta estación debido al error
+                # Continuar con la siguiente estación
+                continue
 
         return results
