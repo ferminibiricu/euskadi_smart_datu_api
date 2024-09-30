@@ -1,13 +1,16 @@
+# train_lstm_model.py
+
 import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization, Masking
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from sklearn.utils import class_weight
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import sys
+import datetime
 
 # Registrar en el log
 def log_message(message):
@@ -15,7 +18,7 @@ def log_message(message):
         log_file.write(message + "\n")
     print(message)
 
-log_message(f"Iniciando el script a las {str(np.datetime64('now'))}")
+log_message(f"Iniciando el script a las {str(datetime.datetime.now())}")
 
 # Directorio de datos preprocesados
 data_dir = '../processed/lstm_data'
@@ -42,15 +45,15 @@ def load_all_station_data(data_dir):
                 y = np.load(os.path.join(data_dir, f'y_{station_id}.npy'))
                 dates = np.load(os.path.join(data_dir, f'dates_{station_id}.npy'))
 
-                # Verificar si hay valores NaN
-                nan_count_X = np.isnan(X).sum()
-                nan_count_y = np.isnan(y).sum()
-                if nan_count_X > 0 or nan_count_y > 0:
-                    # Omitir muestras con NaN
-                    valid_indices = ~np.isnan(X).any(axis=(1,2)) & ~np.isnan(y)
-                    X = X[valid_indices]
-                    y = y[valid_indices]
-                    dates = dates[valid_indices]
+                # Introducir valores faltantes aleatorios en X para simular missing data
+                # Ajustar la proporción según sea necesario (por ejemplo, 0.1 para 10% de valores faltantes)
+                missing_rate = 0.1
+                mask = np.random.rand(*X.shape) < missing_rate
+                X_missing = X.copy()
+                X_missing[mask] = 0  # Puedes usar np.nan si prefieres representar los valores faltantes con NaN
+
+                # Reemplazar X por X_missing
+                X = X_missing
 
                 # Asegurarse de que las etiquetas están en el rango 0-5
                 valid_labels = [0, 1, 2, 3, 4, 5]
@@ -61,8 +64,6 @@ def load_all_station_data(data_dir):
 
                 log_message(f"Cargando datos para la estación {station_id}")
                 log_message(f"Datos cargados para la estación {station_id}: X.shape={X.shape}, y.shape={y.shape}")
-                log_message(f"NaNs en X: {nan_count_X}, NaNs en y: {nan_count_y}")
-                log_message(f"Después de filtrar etiquetas inválidas: X.shape={X.shape}, y.shape={y.shape}")
 
                 all_X.append(X)
                 all_y.append(y)
@@ -105,7 +106,7 @@ log_message(f"Uso de memoria de y_all: {y_all.nbytes / (1024 ** 3):.2f} GB")
 if X_all.size > 0 and y_all.size > 0:
     log_message("Dividiendo los datos en entrenamiento y prueba...")
     # Convertir fechas a números para poder ordenar
-    dates_all_num = np.array([date.astype('datetime64[s]').astype('int') for date in dates_all])
+    dates_all_num = np.array([np.datetime64(date).astype('datetime64[s]').astype('int') for date in dates_all])
 
     # Ordenar los datos por fecha
     sorted_indices = np.argsort(dates_all_num)
@@ -125,16 +126,18 @@ if X_all.size > 0 and y_all.size > 0:
     if len(X_test.shape) < 3:
         X_test = np.expand_dims(X_test, axis=-1)
 
-    # Crear el modelo LSTM para clasificación
-    log_message("Creando el modelo LSTM...")
+    # Crear el modelo LSTM para clasificación con una capa de máscara
+    log_message("Creando el modelo LSTM con Masking Layer...")
     num_classes = 6  # Clases de 0 a 5
 
     model = Sequential()
-    model.add(Input(shape=(X_train.shape[1], X_train.shape[2])))
+    model.add(Masking(mask_value=0.0, input_shape=(X_train.shape[1], X_train.shape[2])))
     model.add(LSTM(128, return_sequences=True))
-    model.add(Dropout(0.3))
+    model.add(Dropout(0.2))
     model.add(LSTM(64))
-    model.add(Dropout(0.3))
+    model.add(Dropout(0.2))
+    model.add(Dense(32, activation='relu'))
+    model.add(BatchNormalization())
     model.add(Dense(num_classes, activation='softmax'))
 
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -154,18 +157,11 @@ if X_all.size > 0 and y_all.size > 0:
     class_weights_dict = dict(zip(classes, class_weights))
     log_message(f"Pesos de las clases calculados: {class_weights_dict}")
 
-    # Ajustar manualmente los pesos de las clases 1, 2 y 3
-    class_weights_dict[1] *= 10
-    class_weights_dict[2] *= 7
-    class_weights_dict[3] *= 5
-
-    log_message(f"Pesos de las clases ajustados manualmente: {class_weights_dict}")
-
     # Crear datasets de TensorFlow para manejar grandes volúmenes de datos
     log_message("Creando datasets de TensorFlow...")
-    batch_size = 128  # Aumentado para acelerar el entrenamiento si la memoria lo permite
+    batch_size = 128  # Ajustar según la memoria disponible
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-    train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    train_dataset = train_dataset.shuffle(buffer_size=10000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
     val_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test))
     val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
@@ -174,6 +170,7 @@ if X_all.size > 0 and y_all.size > 0:
     # Callbacks
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
     checkpoint = ModelCheckpoint('../model/lstm_air_quality_best_model.keras', save_best_only=True, monitor='val_loss')
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6)
     log_message("Callbacks configurados.")
 
     try:
@@ -184,7 +181,7 @@ if X_all.size > 0 and y_all.size > 0:
             epochs=50,
             validation_data=val_dataset,
             class_weight=class_weights_dict,
-            callbacks=[early_stopping, checkpoint],
+            callbacks=[early_stopping, checkpoint, reduce_lr],
             verbose=1
         )
 
@@ -202,7 +199,8 @@ if X_all.size > 0 and y_all.size > 0:
 
         # Reporte de clasificación
         log_message("\nReporte de clasificación:")
-        log_message(classification_report(y_test_eval, y_pred, digits=4))
+        report = classification_report(y_test_eval, y_pred, digits=4)
+        log_message(report)
 
         # Matriz de confusión
         cm = confusion_matrix(y_test_eval, y_pred)

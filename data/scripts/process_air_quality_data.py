@@ -3,8 +3,36 @@
 import pandas as pd
 import os
 import chardet
+import json
+import unicodedata
+import re
 
-def load_and_combine_csv(folder_path):
+def normalize_station_name(name):
+    # Convertir a mayúsculas
+    name = name.upper()
+    # Reemplazar caracteres especiales y acentos
+    name = unicodedata.normalize('NFD', name).encode('ascii', 'ignore').decode('utf-8')
+    # Reemplazar espacios y guiones bajos por nada
+    name = name.replace(' ', '').replace('_', '')
+    # Eliminar caracteres no alfanuméricos
+    name = re.sub(r'[^A-Z0-9]', '', name)
+    return name
+
+def load_station_mapping(station_file):
+    # Cargar datos de las estaciones desde el archivo JSON
+    with open(station_file, 'r', encoding='utf-8') as f:
+        station_data = json.load(f)
+    
+    # Crear un diccionario para mapear nombres de estaciones a sus IDs
+    station_map = {}
+    for station in station_data['features']:
+        station_name = station['properties']['name']
+        station_id = int(station['properties']['id'])
+        normalized_name = normalize_station_name(station_name)
+        station_map[normalized_name] = station_id
+    return station_map
+
+def load_and_combine_csv(folder_path, station_map):
     all_files = []
     file_info = []
     file_count = 0  # Contador de archivos procesados
@@ -13,10 +41,11 @@ def load_and_combine_csv(folder_path):
         for file in files:
             if file.endswith(".csv"):
                 file_path = os.path.join(subdir, file)
+                # Obtener el nombre de la estación del nombre del archivo
                 station_name = os.path.splitext(os.path.basename(file))[0]  # Nombre del archivo sin la extensión
                 file_count += 1
                 print(f"\nProcesando archivo ({file_count}): {file_path}")
-                print(f"Nombre de la estación: {station_name}")
+                print(f"Nombre de la estación (archivo): {station_name}")
 
                 try:
                     # Detectar la codificación del archivo
@@ -83,16 +112,27 @@ def load_and_combine_csv(folder_path):
                     # Eliminar las columnas originales de fecha y hora
                     df.drop(columns=['Date', 'Hour  (GMT)'], inplace=True)
 
-                    # Añadir la columna 'StationName'
-                    df['StationName'] = station_name
+                    # Normalizar el nombre de la estación para el mapeo
+                    normalized_station_name = normalize_station_name(station_name)
 
-                    # Reordenar las columnas para que 'DateTime' sea la primera y 'StationName' sea la segunda
-                    columns = ['DateTime', 'StationName'] + [col for col in df.columns if col not in ['DateTime', 'StationName']]
+                    # Intentar obtener el StationId
+                    station_id = station_map.get(normalized_station_name)
+                    if station_id is None:
+                        print(f"No se pudo encontrar StationId para la estación '{station_name}'. Se omitirá este archivo.")
+                        continue
+
+                    # Añadir las columnas 'StationName' y 'StationId'
+                    df['StationName'] = station_name
+                    df['StationId'] = station_id
+
+                    # Reordenar las columnas para que 'DateTime' sea la primera
+                    columns = ['DateTime', 'StationName', 'StationId'] + [col for col in df.columns if col not in ['DateTime', 'StationName', 'StationId']]
                     df = df[columns]
 
                     all_files.append(df)
                     file_info.append({
                         'station_name': station_name,
+                        'station_id': station_id,
                         'file_path': file_path,
                         'columns': df.columns.tolist()
                     })
@@ -118,8 +158,14 @@ def main():
     # Ruta al directorio donde están almacenados los CSV
     folder_path = '../raw'
 
+    # Ruta al archivo JSON de estaciones
+    station_file = '../raw/Listado estaciones de calidad del aire.json'
+
+    # Cargar el mapeo de estaciones
+    station_map = load_station_mapping(station_file)
+
     # Llamar a la función para cargar y combinar los CSV
-    combined_df, file_info = load_and_combine_csv(folder_path)
+    combined_df, file_info = load_and_combine_csv(folder_path, station_map)
 
     # Continuar con el preprocesamiento si el DataFrame no está vacío
     if not combined_df.empty:
@@ -135,10 +181,10 @@ def main():
             print("No se encontraron columnas con nombres 'NaN' o 'Unnamed'.")
 
         # Verificar el número total de estaciones
-        num_estaciones = combined_df['StationName'].nunique()
+        num_estaciones = combined_df['StationId'].nunique()
         print(f"\nNúmero total de estaciones en el DataFrame: {num_estaciones}")
-        print("Lista de estaciones:")
-        print(combined_df['StationName'].unique())
+        print("Lista de StationIds:")
+        print(combined_df['StationId'].unique())
 
         # Mostrar las primeras filas para verificar los datos
         print("\nPrimeras filas del DataFrame combinado:")
@@ -179,9 +225,7 @@ def main():
                 if len(unmapped_values) > 0:
                     print(f"Valores no mapeados en '{col}': {unmapped_values}")
                     # Asignar 0 (sin datos) a los valores no mapeados
-                    # En lugar de usar inplace=True, asignamos el resultado a la columna
                     combined_df[col] = combined_df[col].fillna(0)
-
 
         # Manejar los valores faltantes en 'ICA Estación' (variable objetivo)
         missing_target = combined_df['ICA Estación'].isnull().sum()
@@ -209,9 +253,6 @@ def main():
         remaining_missing = combined_df.isnull().sum()
         print("\nValores faltantes después de la interpolación:")
         print(remaining_missing)
-
-        # Opcional: Eliminar filas que aún contengan valores faltantes (si las hay)
-        # combined_df.dropna(inplace=True)
 
         # Guardar el DataFrame combinado y preprocesado
         output_file = '../processed/combined_air_quality_data_filled.csv'
