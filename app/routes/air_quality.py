@@ -135,6 +135,7 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
         try:
             # Obtener datos para el resumen actual
             data_for_summary = get_air_quality_data(station_code, summary_hours)
+            logging.info(f"data_for_summary: station: {station_name} (summary_hours: {summary_hours})")
             if not data_for_summary:
                 logging.warning(f"Air quality data not found for station ID {station_code}.")
                 current_air_quality_summary = "Datos no disponibles"
@@ -144,6 +145,7 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
 
             # Obtener datos para la predicción
             data_for_prediction = get_air_quality_data(station_code, prediction_hours)
+            logging.info(f"data_for_prediction: station: {station_name} (summary_hours: {prediction_hours})")
             if not data_for_prediction:
                 logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                 predicted_air_quality_summary = "Predicción no disponible"
