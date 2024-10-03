@@ -61,3 +61,7 @@
       Si la clasificación precisa de las clases minoritarias es crítica, podrías considerar técnicas como oversampling/undersampling, aumento de datos, o ajustar aún más los pesos de las clases para mejorar el balance en las predicciones.
 
       Otra prueba: Ya has calculado automáticamente los pesos de las clases con class_weight.compute_class_weight, pero ahora los ajustaremos manualmente para darle más peso a las clases minoritarias (1, 2 y 3).
+
+
+5. Utilidadaes
+   Informacion a usuarios: Descartar predicted_air_quality_probability menores a 75%
