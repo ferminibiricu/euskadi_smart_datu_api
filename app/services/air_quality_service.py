@@ -170,19 +170,6 @@ def preprocess_data_for_lstm(data):
         logging.error(f"Error while preprocessing data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error en el preprocesamiento de datos para el modelo LSTM.")
 
-def postprocess_lstm_output(prediction):
-    # Corrección del mapeo de índices de clase a categorías
-    categories = {
-        0: 'Extremadamente deficiente',
-        1: 'Muy deficiente',
-        2: 'Deficiente',
-        3: 'Moderado',
-        4: 'Bueno',
-        5: 'Muy bueno'
-    }
-    predicted_category_index = np.argmax(prediction)
-    return categories.get(predicted_category_index, 'Desconocido')
-
 def calculate_time_range(hours: int = 24):
     end_time = datetime.utcnow() - timedelta(minutes=10)
     start_time = end_time - timedelta(hours=hours)
@@ -238,16 +225,43 @@ def predict_air_quality(current_air_quality_data):
                 
         if features_scaled.shape[1] < 24:
             logging.warning(f"No hay suficientes pasos de tiempo para la predicción. Se requieren 24, pero se encontraron {features_scaled.shape[1]}.")
-            return "Predicción no disponible"
+            return "Predicción no disponible", None  # Devolver None para la probabilidad
         
         prediction = model.predict(features_scaled)
+        prediction = prediction.flatten()  # Aseguramos que sea un array 1D
         logging.debug(f"Predicción cruda del modelo: {prediction}")
         
-        predicted_summary = postprocess_lstm_output(prediction)
+        # Reponderación de clases en las predicciones
+        class_weights = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+        
+        # Multiplicar las probabilidades por los pesos
+        adjusted_probs = prediction * class_weights
+        # Normalizar las probabilidades ajustadas para que sumen 1
+        adjusted_probs /= adjusted_probs.sum()
+        
+        logging.debug(f"Probabilidades ajustadas después de reponderación: {adjusted_probs}")
+        
+        # Obtener el índice de la categoría predicha
+        predicted_category_index = np.argmax(adjusted_probs)
+        # Obtener la probabilidad de la categoría predicha
+        predicted_probability = adjusted_probs[predicted_category_index]
+        logging.debug(f"Índice de categoría predicha: {predicted_category_index}")
+        logging.debug(f"Probabilidad de la categoría predicha: {predicted_probability}")
+        
+        # Mapeo de índices de clase a categorías
+        categories = {
+            0: 'Extremadamente deficiente',
+            1: 'Muy deficiente',
+            2: 'Deficiente',
+            3: 'Moderado',
+            4: 'Bueno',
+            5: 'Muy bueno'
+        }
+        predicted_summary = categories.get(predicted_category_index, 'Desconocido')
         logging.debug(f"Resumen de calidad del aire predicho: {predicted_summary}")
         
-        return predicted_summary
+        return predicted_summary, predicted_probability
 
     except Exception as e:
         logging.error(f"Error during prediction: {e}", exc_info=True)
-        return "Predicción no disponible"
+        return "Predicción no disponible", None

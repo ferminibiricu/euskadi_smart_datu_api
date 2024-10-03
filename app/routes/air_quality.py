@@ -84,14 +84,20 @@ def get_air_quality_by_location(lat: float, lon: float):
         if not data_for_prediction:
             logging.warning(f"Air quality data not found for prediction for station ID {nearest_station_code}.")
             predicted_air_quality_summary = "Predicción no disponible"
+            predicted_air_quality_probability = "N/A"
         else:
             try:
                 logging.debug(f"Data for prediction (station {nearest_station_code}): {data_for_prediction}")
-                predicted_air_quality_summary = predict_air_quality(data_for_prediction)
+                predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
                 logging.debug(f"Predicted air quality summary: {predicted_air_quality_summary}")
+                if predicted_probability is not None:
+                    predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
+                else:
+                    predicted_air_quality_probability = "N/A"
             except Exception as e:
                 logging.error(f"Error in prediction: {str(e)}", exc_info=True)
                 predicted_air_quality_summary = "Predicción no disponible"
+                predicted_air_quality_probability = "N/A"
 
         logging.info(f"Returning air quality data and predictions for station {nearest_station_name} (ID: {nearest_station_code})")
         return {
@@ -104,6 +110,7 @@ def get_air_quality_by_location(lat: float, lon: float):
             "distance": round(distance, 2),
             "current_air_quality_summary": current_air_quality_summary,
             "predicted_air_quality_summary": predicted_air_quality_summary,
+            "predicted_air_quality_probability": predicted_air_quality_probability,
         }
     except HTTPException as he:
         raise he
@@ -149,14 +156,20 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
             if not data_for_prediction:
                 logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                 predicted_air_quality_summary = "Predicción no disponible"
+                predicted_air_quality_probability = "N/A"
             else:
                 try:
                     logging.debug(f"Data for prediction (station {station_code}): {data_for_prediction}")
-                    predicted_air_quality_summary = predict_air_quality(data_for_prediction)
+                    predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
                     logging.debug(f"Predicted air quality summary for station {station_code}: {predicted_air_quality_summary}")
+                    if predicted_probability is not None:
+                        predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
+                    else:
+                        predicted_air_quality_probability = "N/A"
                 except Exception as e:
                     logging.error(f"Error in prediction for station {station_code}: {str(e)}", exc_info=True)
                     predicted_air_quality_summary = "Predicción no disponible"
+                    predicted_air_quality_probability = "N/A"
 
             return {
                 "station_code": station_code,
@@ -165,6 +178,7 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                 "station_lon": station_lon,
                 "current_air_quality_summary": current_air_quality_summary,
                 "predicted_air_quality_summary": predicted_air_quality_summary,
+                "predicted_air_quality_probability": predicted_air_quality_probability,
             }
         except HTTPException as he:
             raise he
@@ -203,14 +217,20 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                 if not data_for_prediction:
                     logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                     predicted_air_quality_summary = "Predicción no disponible"
+                    predicted_air_quality_probability = "N/A"
                 else:
                     try:
                         logging.debug(f"Data for prediction (station {station_code}): {data_for_prediction}")
-                        predicted_air_quality_summary = predict_air_quality(data_for_prediction)
+                        predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
                         logging.debug(f"Predicted air quality summary for station {station_code}: {predicted_air_quality_summary}")
+                        if predicted_probability is not None:
+                            predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
+                        else:
+                            predicted_air_quality_probability = "N/A"
                     except Exception as e:
                         logging.error(f"Error in prediction for station {station_code}: {str(e)}", exc_info=True)
                         predicted_air_quality_summary = "Predicción no disponible"
+                        predicted_air_quality_probability = "N/A"
 
                 station_result = {
                     "station_code": station_code,
@@ -219,6 +239,7 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                     "station_lon": station_lon,
                     "current_air_quality_summary": current_air_quality_summary,
                     "predicted_air_quality_summary": predicted_air_quality_summary,
+                    "predicted_air_quality_probability": predicted_air_quality_probability,
                 }
                 results.append(station_result)
             except HTTPException as he:
