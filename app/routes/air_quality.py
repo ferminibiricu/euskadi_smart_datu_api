@@ -12,6 +12,7 @@ from app.services.air_quality_service import (
     calculate_air_quality_summary,
 )
 import logging
+import time
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ def get_nearest_station_by_location(lat: float, lon: float):
 def get_air_quality_by_location(lat: float, lon: float):
     logging.info(f"Received request for air quality data at lat: {lat}, lon: {lon}.")
 
+    start_time = time.time()
     summary_hours = 6
     prediction_hours = 24
 
@@ -70,25 +72,23 @@ def get_air_quality_by_location(lat: float, lon: float):
         distance = station["distance"]
         logging.info(f"Nearest station found: {nearest_station_name} (ID: {nearest_station_code})")
 
-        # Obtener datos para el resumen actual
-        data_for_summary = get_air_quality_data(nearest_station_code, summary_hours)
-        if not data_for_summary:
+        # Obtener datos para el resumen actual y la predicción (usando el máximo de horas necesarias)
+        max_hours = max(summary_hours, prediction_hours)
+        air_quality_data = get_air_quality_data(nearest_station_code, max_hours)
+        if not air_quality_data:
             logging.warning(f"Air quality data not found for the nearest station ID {nearest_station_code}.")
             current_air_quality_summary = "Datos no disponibles"
-        else:
-            current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-            logging.debug(f"Current air quality summary: {current_air_quality_summary}")
-
-        # Obtener datos para la predicción
-        data_for_prediction = get_air_quality_data(nearest_station_code, prediction_hours)
-        if not data_for_prediction:
-            logging.warning(f"Air quality data not found for prediction for station ID {nearest_station_code}.")
             predicted_air_quality_summary = "Predicción no disponible"
             predicted_air_quality_probability = "N/A"
         else:
+            # Calcular el resumen actual
+            current_air_quality_summary = calculate_air_quality_summary(air_quality_data[:summary_hours], summary_hours)
+            logging.debug(f"Current air quality summary: {current_air_quality_summary}")
+
+            # Calcular la predicción
             try:
-                logging.debug(f"Data for prediction (station {nearest_station_code}): {data_for_prediction}")
-                predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
+                logging.debug(f"Data for prediction (station {nearest_station_code}): {air_quality_data[:prediction_hours]}")
+                predicted_air_quality_summary, predicted_probability = predict_air_quality(air_quality_data[:prediction_hours])
                 logging.debug(f"Predicted air quality summary: {predicted_air_quality_summary}")
                 if predicted_probability is not None:
                     predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
@@ -99,6 +99,8 @@ def get_air_quality_by_location(lat: float, lon: float):
                 predicted_air_quality_summary = "Predicción no disponible"
                 predicted_air_quality_probability = "N/A"
 
+        end_time = time.time()
+        logging.info(f"Time taken for /air_quality: {end_time - start_time:.2f} seconds")
         logging.info(f"Returning air quality data and predictions for station {nearest_station_name} (ID: {nearest_station_code})")
         return {
             "lat": lat,
@@ -122,6 +124,7 @@ def get_air_quality_by_location(lat: float, lon: float):
 def get_air_quality_for_all_stations(id: Optional[int] = None):
     logging.info(f"Received request for air quality data for all stations or for station ID: {id}.")
 
+    start_time = time.time()
     summary_hours = 6
     prediction_hours = 24
 
@@ -140,27 +143,23 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
         logging.info(f"Processing station: {station_name} (ID: {station_code})")
 
         try:
-            # Obtener datos para el resumen actual
-            data_for_summary = get_air_quality_data(station_code, summary_hours)
-            logging.info(f"data_for_summary: station: {station_name} (summary_hours: {summary_hours})")
-            if not data_for_summary:
+            # Obtener datos para el resumen actual y la predicción (usando el máximo de horas necesarias)
+            max_hours = max(summary_hours, prediction_hours)
+            air_quality_data = get_air_quality_data(station_code, max_hours)
+            if not air_quality_data:
                 logging.warning(f"Air quality data not found for station ID {station_code}.")
                 current_air_quality_summary = "Datos no disponibles"
-            else:
-                current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-                logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
-
-            # Obtener datos para la predicción
-            data_for_prediction = get_air_quality_data(station_code, prediction_hours)
-            logging.info(f"data_for_prediction: station: {station_name} (summary_hours: {prediction_hours})")
-            if not data_for_prediction:
-                logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                 predicted_air_quality_summary = "Predicción no disponible"
                 predicted_air_quality_probability = "N/A"
             else:
+                # Calcular el resumen actual
+                current_air_quality_summary = calculate_air_quality_summary(air_quality_data[:summary_hours], summary_hours)
+                logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
+
+                # Calcular la predicción
                 try:
-                    logging.debug(f"Data for prediction (station {station_code}): {data_for_prediction}")
-                    predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
+                    logging.debug(f"Data for prediction (station {station_code}): {air_quality_data[:prediction_hours]}")
+                    predicted_air_quality_summary, predicted_probability = predict_air_quality(air_quality_data[:prediction_hours])
                     logging.debug(f"Predicted air quality summary for station {station_code}: {predicted_air_quality_summary}")
                     if predicted_probability is not None:
                         predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
@@ -171,6 +170,8 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                     predicted_air_quality_summary = "Predicción no disponible"
                     predicted_air_quality_probability = "N/A"
 
+            end_time = time.time()
+            logging.info(f"Time taken for /air_quality_all with station ID {id}: {end_time - start_time:.2f} seconds")
             return {
                 "station_code": station_code,
                 "station_name": station_name,
@@ -203,25 +204,23 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
             logging.info(f"Processing station: {station_name} (ID: {station_code})")
 
             try:
-                # Obtener datos para el resumen actual
-                data_for_summary = get_air_quality_data(station_code, summary_hours)
-                if not data_for_summary:
+                # Obtener datos para el resumen actual y la predicción (usando el máximo de horas necesarias)
+                max_hours = max(summary_hours, prediction_hours)
+                air_quality_data = get_air_quality_data(station_code, max_hours)
+                if not air_quality_data:
                     logging.warning(f"Air quality data not found for station ID {station_code}.")
                     current_air_quality_summary = "Datos no disponibles"
-                else:
-                    current_air_quality_summary = calculate_air_quality_summary(data_for_summary, summary_hours)
-                    logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
-
-                # Obtener datos para la predicción
-                data_for_prediction = get_air_quality_data(station_code, prediction_hours)
-                if not data_for_prediction:
-                    logging.warning(f"Air quality data not found for prediction for station ID {station_code}.")
                     predicted_air_quality_summary = "Predicción no disponible"
                     predicted_air_quality_probability = "N/A"
                 else:
+                    # Calcular el resumen actual
+                    current_air_quality_summary = calculate_air_quality_summary(air_quality_data[:summary_hours], summary_hours)
+                    logging.debug(f"Current air quality summary for station {station_code}: {current_air_quality_summary}")
+
+                    # Calcular la predicción
                     try:
-                        logging.debug(f"Data for prediction (station {station_code}): {data_for_prediction}")
-                        predicted_air_quality_summary, predicted_probability = predict_air_quality(data_for_prediction)
+                        logging.debug(f"Data for prediction (station {station_code}): {air_quality_data[:prediction_hours]}")
+                        predicted_air_quality_summary, predicted_probability = predict_air_quality(air_quality_data[:prediction_hours])
                         logging.debug(f"Predicted air quality summary for station {station_code}: {predicted_air_quality_summary}")
                         if predicted_probability is not None:
                             predicted_air_quality_probability = f"{predicted_probability * 100:.2f}%"
@@ -249,4 +248,6 @@ def get_air_quality_for_all_stations(id: Optional[int] = None):
                 # Continuar con la siguiente estación
                 continue
 
+        end_time = time.time()
+        logging.info(f"Time taken for /air_quality_all: {end_time - start_time:.2f} seconds")
         return results

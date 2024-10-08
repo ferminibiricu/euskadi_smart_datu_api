@@ -2,7 +2,7 @@ air_quality:
   base_url: "https://api.euskadi.eus/air-quality"
   stations_endpoint: "/stations?lang=SPANISH"
   hourly_measurements_endpoint: "/measurements/hourly/stations/{station_code}/from/{start_time}/to/{end_time}?lang=SPANISH"
-  exclusion_threshold: 50  # En porcentaje
+  exclusion_threshold: 75  # En porcentaje - Si el numero de registros horarios analizados sin datos ICA es superior a este umbral no se calcula el resumen
 
 logging:
   level: "DEBUG"
