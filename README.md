@@ -4,18 +4,18 @@
 
 2. Algoritmo de calculo de current_air_quality_summary utilizando:
 
-    Datos de las ultimas X, defecto 6, horas
+    Datos de las ultimas  6 horas
     Excluidos registros sin datos. Si los registro excluidos superan umbral de porcentaje de datos toales, valor parametrizable, se devuelve No disponible.
-    POnderadas por pesos de mayor peso la hora más reciente al menor peso de la hora más antigua considerada
+    Ponderadas por pesos de mayor peso la hora más reciente al menor peso de la hora más antigua considerada.
     Valor resultante es la media ponderada de los valores presentes.
 
 3. Preparacion de los datos
 
    Fichero combinado para recoger el historico de todas las estaciones desde 1 enero de 2020
    Rellena los valores faltantes usando forward-fill y backward-fill, e interpola las columnas continuas
-   POsteriormente generacion de los X.npy e Y.npy para cada estación para servir de input a LTSM
+   Posteriormente generacion de los X.npy e Y.npy para cada estación para servir de input a LTSM
 
-4. Creacion del MOdelo - Redes Neuronales LTSM
+4. Creacion del Modelo - Redes Neuronales LTSM
 
    Siguientes pasos para el modelo LSTM utilizando tensorflow:
     Cargar los datos preprocesados: Cada archivo .npy contiene las secuencias de entrada (X) y sus correspondientes valores de salida (y) para una estación. Tendrás que cargar estos archivos en tu modelo LSTM para entrenar y evaluar el rendimiento.
@@ -38,7 +38,7 @@
 
     Entrenamiento: El modelo se entrena con los datos combinados de todas las estaciones durante un número de épocas definido (en este caso, 10), con una parte de los datos separados para validación.
 
-    Guardado del modelo: El modelo entrenado se guarda en ../model/air_quality_lstm_model.h5 para que puedas cargarlo más tarde en tu API.
+    Guardado del modelo: El modelo entrenado se guarda para posteriormente cargarlo para ser invocado desde los endpoints del API.
 
 
     ¡Felicidades! El modelo ha completado su entrenamiento de manera exitosa, y los resultados del log sugieren que ha sido un proceso sólido. Aquí tienes un resumen de las métricas clave:
@@ -64,4 +64,4 @@
 
 
 5. Utilidadaes
-   Informacion a usuarios: Descartar predicted_air_quality_probability menores a 75%
+   Aplicaciones web o moviles de consulta de calidad del aire: Descartar predicted_air_quality_probability menores a 75%
